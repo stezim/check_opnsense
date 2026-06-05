@@ -30,7 +30,7 @@ Add a check command definition and a service to Icinga2.
 Use `./check_opnsense.py -h` to get instructions:
 
 ```shell
-usage: check_opnsense.py [-h] -H HOSTNAME [-p PORT] --api-key API_KEY --api-secret API_SECRET [-k] -m {updates,ipsec,interfaces,services,wireguard,disk,memory,swap}
+usage: check_opnsense.py [-h] -H HOSTNAME [-p PORT] --api-key API_KEY --api-secret API_SECRET [-k] -m {updates,ipsec,interfaces,services,wireguard,disk,memory,swap,cpu}
                          [-w TRESHOLD_WARNING] [-c TRESHOLD_CRITICAL] [-v] [-f FILTER]
 
 Check command OPNsense firewall monitoring
@@ -48,7 +48,7 @@ API Options:
   -k, --insecure        Don't verify HTTPS certificate
 
 Check Options:
-  -m, --mode {updates,ipsec,interfaces,services,wireguard,disk,memory,swap}
+  -m, --mode {updates,ipsec,interfaces,services,wireguard,disk,memory,swap,cpu}
                         Mode to use.
   -w, --warning TRESHOLD_WARNING
                         Warning treshold for check value
@@ -169,4 +169,20 @@ Swap usage on /dev/gpt/swapfs is 1%
 ./check_opnsense.py -H <OPNSENSE_HOSTNAME> --api-key <API_KEY> --api-secret <API_SECRET> -m swap -f /dev/gpt/swapfs -c 8
 [CRITICAL] Total swap usage is 9% | /dev/md0=9%;80.0;8.0;0;100
 Swap usage on /dev/md0 is 9%
+```
+
+***Check CPU***
+
+Options:
+
+* `-w` and `-c` define maximum memory usage i.e. `-w 80` will warn if memory usage exceeds 80%
+
+```shell
+./check_opnsense.py -H <OPNSENSE_HOSTNAME> --api-key <API_KEY> --api-secret <API_SECRET> -m cpu
+[OK] CPU usage is 1.9% | cpu_usage=1.9%;80.0;90.0;0;100
+```
+
+```shell
+./check_opnsense.py -H <OPNSENSE_HOSTNAME> --api-key <API_KEY> --api-secret <API_SECRET> -m cpu -w 30 -c 40
+[CRITICAL] CPU usage is 42.7% | cpu_usage=42.7%;1.0;1.2;0;100
 ```

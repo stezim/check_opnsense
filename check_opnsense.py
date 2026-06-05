@@ -170,6 +170,8 @@ class CheckOPNsense:
             self.check_memory()
         elif self.options.mode == "swap":
             self.check_swap()
+        elif self.options.mode == "cpu":
+            self.check_cpu()
         else:
             message = f"Check mode '{self.options.mode}' not known"
             self.output(CheckState.UNKNOWN, message)
@@ -226,6 +228,7 @@ class CheckOPNsense:
                 "disk",
                 "memory",
                 "swap",
+                "cpu",
             ),
             required=True,
             help="Mode to use.",
@@ -632,6 +635,45 @@ class CheckOPNsense:
         else:
             self.check_result = CheckState.UNKNOWN
             self.check_message = "No swap found"
+
+    def check_cpu(self) -> None:
+        """Check CPU usage."""
+        url = self.get_url("diagnostics/activity/get_activity")
+        data = self.request(url)
+
+        warn = float(self.options.treshold_warning or "80")
+        crit = float(self.options.treshold_critical or "90")
+
+        # Returned data looks something like this, we want CPU idle percentage in this case: 
+        #
+        #"headers": [
+        #  "last pid: 24927;  load averages:  2.06,  0.74,  0.29  up 0+00:00:52    08:44:18",
+        #  "147 threads:   2 running, 123 sleeping, 22 waiting",
+        #  "CPU:  0.0% user,  0.0% nice,  0.4% system,  0.0% interrupt, 99.6% idle",
+        #  "Mem: 159M Active, 117M Inact, 212M Wired, 103M Buf, 471M Free",
+        #  "Swap: 7674M Total, 7674M Free"
+        #],
+
+        try:
+            idle_pct = data["headers"][2].split()
+            idle_pct = float(idle_pct[9].strip("%"))
+
+            used_pct = round(float(100.00 - idle_pct), 1)
+        except Exception as e:
+            self.check_result = CheckState.UNKNOWN
+            self.check_message = f"No CPU usage data received. ({e})"
+
+        self.perfdata.append(f"cpu_usage={used_pct}%;{warn};{crit};0;100")
+
+        if used_pct > crit:
+            self.check_result = CheckState.CRITICAL
+            self.check_message = f"CPU usage is {used_pct}%"
+        elif used_pct > warn:
+            self.check_result = CheckState.WARNING
+            self.check_message = f"CPU usage is {used_pct}%"
+        else:
+            self.check_result = CheckState.OK
+            self.check_message = f"CPU usage is {used_pct}%"
 
     def __init__(self) -> None:
         self.options = {}
