@@ -172,6 +172,8 @@ class CheckOPNsense:
             self.check_swap()
         elif self.options.mode == "cpu":
             self.check_cpu()
+        elif self.options.mode == "load":
+            self.check_load()
         else:
             message = f"Check mode '{self.options.mode}' not known"
             self.output(CheckState.UNKNOWN, message)
@@ -229,6 +231,7 @@ class CheckOPNsense:
                 "memory",
                 "swap",
                 "cpu",
+                "load",
             ),
             required=True,
             help="Mode to use.",
@@ -561,7 +564,7 @@ class CheckOPNsense:
                 arc_mem = int(data["memory"].get("arc_frmt"))
                 used_mem = used_mem - arc_mem
 
-            used_pct = round(float(used_mem / total_mem * 100))
+            used_pct = round(float(used_mem / total_mem * 100), 1)
 
             self.perfdata.append(f"memory={used_pct}%;{warn};{crit};0;100;")
             if arc_mem > 0:
@@ -611,13 +614,13 @@ class CheckOPNsense:
                     used_swap = int(dev.get("used"))
                     total_used_swap += used_swap
 
-                    used_pct = round(float(used_swap / swap * 100))
+                    used_pct = round(float(used_swap / swap * 100), 1)
 
                     self.check_details.append(f"Swap usage on {swap_device} is {used_pct}%")
                     # Performance data
                     self.perfdata.append(f"{swap_device}={used_pct}%;{warn};{crit};0;100")
 
-                total_used_pct = round(float(total_used_swap / total_swap * 100))
+                total_used_pct = round(float(total_used_swap / total_swap * 100), 1)
 
         except Exception as e:
             self.check_result = CheckState.UNKNOWN
@@ -644,15 +647,15 @@ class CheckOPNsense:
         warn = float(self.options.treshold_warning or "80")
         crit = float(self.options.treshold_critical or "90")
 
-        # Returned data looks something like this, we want CPU idle percentage in this case: 
+        # Returned data looks something like this, we want CPU idle percentage in this case:
         #
-        #"headers": [
+        # "headers": [
         #  "last pid: 24927;  load averages:  2.06,  0.74,  0.29  up 0+00:00:52    08:44:18",
         #  "147 threads:   2 running, 123 sleeping, 22 waiting",
         #  "CPU:  0.0% user,  0.0% nice,  0.4% system,  0.0% interrupt, 99.6% idle",
         #  "Mem: 159M Active, 117M Inact, 212M Wired, 103M Buf, 471M Free",
         #  "Swap: 7674M Total, 7674M Free"
-        #],
+        # ],
 
         try:
             idle_pct = data["headers"][2].split()
@@ -674,6 +677,58 @@ class CheckOPNsense:
         else:
             self.check_result = CheckState.OK
             self.check_message = f"CPU usage is {used_pct}%"
+
+    def check_load(self) -> None:
+        """Check load."""
+        url = self.get_url("diagnostics/activity/get_activity")
+        data = self.request(url)
+
+        warn = float(self.options.treshold_warning or "3")
+        crit = float(self.options.treshold_critical or "4")
+
+        num_critical = 0
+        num_warning = 0
+
+        try:
+
+            load1 = data["headers"][0].split()
+            load1 = float(load1[5].strip(","))
+
+            load5 = data["headers"][0].split()
+            load5 = float(load5[6].strip(","))
+
+            load15 = data["headers"][0].split()
+            load15 = float(load15[7].strip(","))
+
+            load_values = [load1, load5, load15]
+            loads = ["load1", "load5", "load15"]
+
+            for x in range(3):
+
+                if load_values[x] >= crit:
+                    num_critical += 1
+                    self.check_details.append(f"[CRITICAL] {loads[x]} is {load_values[x]}")
+                elif load_values[x] >= warn:
+                    num_warning += 1
+                    self.check_details.append(f"[WARNING] {loads[x]} is {load_values[x]}")
+                else:
+                    self.check_details.append(f"[OK] {loads[x]} is {load_values[x]}")
+
+                self.perfdata.append(f"{loads[x]}={load_values[x]};{warn};{crit};0;")
+
+        except Exception as e:
+            self.check_result = CheckState.UNKNOWN
+            self.check_message = f"No load data received. ({e})"
+
+        if num_critical > 0:
+            self.check_result = CheckState.CRITICAL
+            self.check_message = "Load is critical."
+        elif num_warning > 0:
+            self.check_result = CheckState.WARNING
+            self.check_message = "Load is warning."
+        else:
+            self.check_result = CheckState.OK
+            self.check_message = "Load is ok."
 
     def __init__(self) -> None:
         self.options = {}
